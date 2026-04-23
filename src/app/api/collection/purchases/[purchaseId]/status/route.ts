@@ -47,7 +47,7 @@ export async function GET(
     paymentStatus: purchase.paymentStatus,
     generationStatus: purchase.generationStatus,
     emailStatus: purchase.emailStatus,
-    pdfUrl: purchase.pdfUrl,
+    pdfUrl: purchase.pdfBase64 ? `/api/collection/purchases/${purchaseId}/download` : null,
     productTitle: purchase.productTitle,
     emailMessage: purchase.emailLogs?.[0]?.errorMessage ?? null
   });

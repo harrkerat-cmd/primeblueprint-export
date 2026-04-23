@@ -62,7 +62,7 @@ export async function GET(
     selectedPackage: reportRequest.selectedPackage,
     generationStatus: reportRequest.report?.generationStatus ?? reportRequest.generationStatus,
     emailStatus: reportRequest.emailStatus,
-    pdfUrl: reportRequest.report?.pdfUrl,
+    pdfUrl: reportRequest.report?.pdfBase64 ? `/api/reports/${requestId}/download` : null,
     previewTitle: reportRequest.previewTitle,
     generationError: reportRequest.report?.generationError ?? null,
     emailMessage: reportRequest.emailLogs[0]?.errorMessage ?? null,
