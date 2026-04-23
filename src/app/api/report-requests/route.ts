@@ -11,8 +11,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ draft: null });
   }
 
-  const draft = await getLatestResumableReportRequest(categoryParam as ReportCategory);
-  return NextResponse.json({ draft });
+  try {
+    const draft = await getLatestResumableReportRequest(categoryParam as ReportCategory);
+    return NextResponse.json({ draft });
+  } catch (error) {
+    console.error("[api/report-requests] Failed to load latest draft.", error);
+    return NextResponse.json({ draft: null }, { status: 500 });
+  }
 }
 
 export async function POST(request: NextRequest) {
@@ -23,6 +28,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Valid category is required." }, { status: 400 });
   }
 
-  const reportRequest = await createReportRequest(category);
-  return NextResponse.json(reportRequest);
+  try {
+    const reportRequest = await createReportRequest(category);
+    return NextResponse.json(reportRequest);
+  } catch (error) {
+    console.error("[api/report-requests] Failed to create report request.", error);
+    return NextResponse.json(
+      { error: "Report creation is temporarily unavailable. Persistent storage is required in production." },
+      { status: 500 }
+    );
+  }
 }

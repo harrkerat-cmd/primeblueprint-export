@@ -105,8 +105,6 @@ type LocalStore = {
   constructionLeadInterests: StoredLeadInterest[];
 };
 
-const storePath = path.join(process.cwd(), ".primeblueprint", "store.json");
-
 const emptyStore: LocalStore = {
   reportRequests: [],
   payments: [],
@@ -114,12 +112,32 @@ const emptyStore: LocalStore = {
   emailLogs: [],
   constructionLeadInterests: []
 };
+const storePath = path.join(process.cwd(), ".primeblueprint", "store.json");
+const canUseLocalFilesystem = process.env.NODE_ENV !== "production";
+let memoryStore: LocalStore = structuredClone(emptyStore);
+
+function createProductionPersistenceError(action: string, cause?: unknown) {
+  return new Error(
+    `[report-store] ${action} requires database-backed persistence in production. Local filesystem fallback is disabled.`,
+    cause === undefined ? undefined : { cause }
+  );
+}
+
+function throwIfProductionFallback(action: string, cause?: unknown) {
+  if (!canUseLocalFilesystem) {
+    throw createProductionPersistenceError(action, cause);
+  }
+}
 
 function logDatabaseFallback(action: string, error: unknown) {
   console.warn(`[report-store] Falling back to local store for ${action}.`, error);
 }
 
 async function ensureLocalStore() {
+  if (!canUseLocalFilesystem) {
+    return memoryStore;
+  }
+
   const directory = path.dirname(storePath);
   await mkdir(directory, { recursive: true });
 
@@ -133,6 +151,11 @@ async function ensureLocalStore() {
 }
 
 async function saveLocalStore(store: LocalStore) {
+  if (!canUseLocalFilesystem) {
+    memoryStore = store;
+    return;
+  }
+
   await mkdir(path.dirname(storePath), { recursive: true });
   await writeFile(storePath, JSON.stringify(store, null, 2), "utf8");
 }
@@ -187,9 +210,12 @@ export async function createReportRequest(category: ReportCategory) {
         }
       });
     } catch (error) {
+      throwIfProductionFallback("createReportRequest", error);
       logDatabaseFallback("createReportRequest", error);
     }
   }
+
+  throwIfProductionFallback("createReportRequest");
 
   return updateLocalStore((store) => {
     const timestamp = nowIso();
@@ -288,9 +314,12 @@ export async function saveDraftReportRequest({
         }
       });
     } catch (error) {
+      throwIfProductionFallback("saveDraftReportRequest", error);
       logDatabaseFallback("saveDraftReportRequest", error);
     }
   }
+
+  throwIfProductionFallback("saveDraftReportRequest");
 
   return updateLocalStore((store) => {
     const record = store.reportRequests.find((item) => item.id === requestId);
@@ -374,9 +403,12 @@ export async function clearDraftReportRequest(requestId: string) {
         }
       });
     } catch (error) {
+      throwIfProductionFallback("clearDraftReportRequest", error);
       logDatabaseFallback("clearDraftReportRequest", error);
     }
   }
+
+  throwIfProductionFallback("clearDraftReportRequest");
 
   return updateLocalStore((store) => {
     const record = store.reportRequests.find((item) => item.id === requestId);
@@ -427,9 +459,12 @@ export async function getReportRequest(requestId: string) {
         }
       });
     } catch (error) {
+      throwIfProductionFallback("getReportRequest", error);
       logDatabaseFallback("getReportRequest", error);
     }
   }
+
+  throwIfProductionFallback("getReportRequest");
 
   const store = await ensureLocalStore();
   return assembleLocalRequest(store, requestId);
@@ -489,9 +524,12 @@ export async function getLatestResumableReportRequest(category: ReportCategory) 
 
       return candidates.find((candidate) => hasDraftProgress(candidate)) ?? null;
     } catch (error) {
+      throwIfProductionFallback("getLatestResumableReportRequest", error);
       logDatabaseFallback("getLatestResumableReportRequest", error);
     }
   }
+
+  throwIfProductionFallback("getLatestResumableReportRequest");
 
   const store = await ensureLocalStore();
   const candidates = [...store.reportRequests]

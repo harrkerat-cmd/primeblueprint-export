@@ -46,6 +46,9 @@ type LocalStore = {
 
 const storePath = path.join(process.cwd(), '.primeblueprint', 'collection-store.json');
 const emptyStore: LocalStore = { purchases: [], emailLogs: [] };
+const canUseLocalFilesystem =
+  process.env.NODE_ENV !== 'production' && !process.env.VERCEL;
+let memoryStore: LocalStore = structuredClone(emptyStore);
 
 function logDatabaseFallback(action: string, error: unknown) {
   console.warn(`[collection-store] Falling back to local store for ${action}.`, error);
@@ -56,6 +59,10 @@ function nowIso() {
 }
 
 async function ensureLocalStore() {
+  if (!canUseLocalFilesystem) {
+    return memoryStore;
+  }
+
   await mkdir(path.dirname(storePath), { recursive: true });
   try {
     return JSON.parse(await readFile(storePath, 'utf8')) as LocalStore;
@@ -66,6 +73,11 @@ async function ensureLocalStore() {
 }
 
 async function saveLocalStore(store: LocalStore) {
+  if (!canUseLocalFilesystem) {
+    memoryStore = store;
+    return;
+  }
+
   await mkdir(path.dirname(storePath), { recursive: true });
   await writeFile(storePath, JSON.stringify(store, null, 2), 'utf8');
 }

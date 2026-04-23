@@ -14,7 +14,16 @@ export async function GET(
   { params }: { params: Promise<{ requestId: string }> }
 ) {
   const { requestId } = await params;
-  const reportRequest = await getReportRequest(requestId);
+  let reportRequest;
+  try {
+    reportRequest = await getReportRequest(requestId);
+  } catch (error) {
+    console.error("[api/report-requests/[requestId]] Failed to load report request.", error);
+    return NextResponse.json(
+      { error: "Report request loading is temporarily unavailable. Persistent storage is required in production." },
+      { status: 500 }
+    );
+  }
 
   if (!reportRequest) {
     return NextResponse.json({ error: "Report request not found." }, { status: 404 });
@@ -40,12 +49,21 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid answers payload." }, { status: 400 });
   }
 
-  const reportRequest = await saveDraftReportRequest({
-    requestId,
-    category,
-    answers: parseAnswers.data,
-    lastSavedStep: body.lastSavedStep
-  });
+  let reportRequest;
+  try {
+    reportRequest = await saveDraftReportRequest({
+      requestId,
+      category,
+      answers: parseAnswers.data,
+      lastSavedStep: body.lastSavedStep
+    });
+  } catch (error) {
+    console.error("[api/report-requests/[requestId]] Failed to save draft.", error);
+    return NextResponse.json(
+      { error: "Draft saving is temporarily unavailable. Persistent storage is required in production." },
+      { status: 500 }
+    );
+  }
 
   return NextResponse.json(reportRequest);
 }
@@ -55,7 +73,16 @@ export async function DELETE(
   { params }: { params: Promise<{ requestId: string }> }
 ) {
   const { requestId } = await params;
-  const reportRequest = await clearDraftReportRequest(requestId);
+  let reportRequest;
+  try {
+    reportRequest = await clearDraftReportRequest(requestId);
+  } catch (error) {
+    console.error("[api/report-requests/[requestId]] Failed to clear draft.", error);
+    return NextResponse.json(
+      { error: "Draft reset is temporarily unavailable. Persistent storage is required in production." },
+      { status: 500 }
+    );
+  }
 
   if (!reportRequest) {
     return NextResponse.json({ error: "Report request not found." }, { status: 404 });
