@@ -879,7 +879,7 @@ export async function completeGeneratedReport({
   requestId: string;
   title: string;
   content: GeneratedReportContent;
-  pdfBase64: string;
+  pdfBase64: string | null;
   pdfUrl: string;
 }) {
   if (isDatabaseConfigured && prisma) {

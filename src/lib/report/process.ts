@@ -16,6 +16,59 @@ import {
 import { generateReportContent } from "@/lib/report/generate";
 import { getBaseUrl } from "@/lib/utils";
 
+type PaidReportRequest = NonNullable<Awaited<ReturnType<typeof getReportRequest>>>;
+
+async function buildPaidReportAssets(requestId: string, request: PaidReportRequest) {
+  const selectedPackageId = String(request.selectedPackage ?? request.payments[0]?.packageTier ?? "PREMIUM");
+  const selectedPackage = getPackageById(selectedPackageId)?.id ?? "PREMIUM";
+  const content = await generateReportContent({
+    category: request.category,
+    packageId: selectedPackage,
+    userName: request.userName ?? "Client",
+    answers: (request.answersJson as Record<string, unknown>) ?? {},
+    reportTitle:
+      request.previewTitle ?? `${getCategoryByValue(request.category)?.reportTitle ?? "Personalized Report"} for ${request.userName ?? "You"}`
+  });
+
+  if (!content.title?.trim() || content.pages.length === 0) {
+    throw new Error("Report content generation returned empty output.");
+  }
+
+  const pdfBuffer = await renderReportPdf({
+    content,
+    category: request.category,
+    packageId: selectedPackage,
+    userName: request.userName ?? "Client",
+    createdAt: new Date()
+  });
+
+  if (!pdfBuffer || pdfBuffer.length < 1200) {
+    throw new Error("Report PDF generation returned an invalid file.");
+  }
+
+  return {
+    content,
+    pdfBuffer,
+    pdfBase64: pdfBuffer.toString("base64"),
+    pdfUrl: `${getBaseUrl()}/api/reports/${requestId}/download`,
+    title: content.title
+  };
+}
+
+export async function generatePaidReportPdfBuffer(requestId: string) {
+  const request = await getReportRequest(requestId);
+
+  if (!request || request.paymentStatus !== PaymentStatus.PAID) {
+    return null;
+  }
+
+  const assets = await buildPaidReportAssets(requestId, request);
+  return {
+    buffer: assets.pdfBuffer,
+    title: assets.title
+  };
+}
+
 async function sendReportEmail({
   requestId,
   request,
@@ -106,12 +159,17 @@ export async function processPaidReport(requestId: string) {
     return null;
   }
 
-  if (request.report?.generationStatus === GenerationStatus.COMPLETED && request.report.pdfBase64) {
+  if (request.report?.generationStatus === GenerationStatus.COMPLETED) {
+    if (request.emailLogs.some((log) => log.status === EmailStatus.SENT)) {
+      return request.report;
+    }
+
+    const assets = await buildPaidReportAssets(requestId, request);
     await sendReportEmail({
       requestId,
       request,
-      pdfBase64: request.report.pdfBase64,
-      pdfUrl: request.report.pdfUrl ?? `${getBaseUrl()}/api/reports/${requestId}/download`,
+      pdfBase64: assets.pdfBase64,
+      pdfUrl: request.report.pdfUrl ?? assets.pdfUrl,
       title: request.report.title
     });
     return request.report;
@@ -128,55 +186,27 @@ export async function processPaidReport(requestId: string) {
   });
 
   try {
-    const selectedPackageId = String(request.selectedPackage ?? request.payments[0]?.packageTier ?? "PREMIUM");
-    const selectedPackage = getPackageById(selectedPackageId)?.id ?? "PREMIUM";
-    const content = await generateReportContent({
-      category: request.category,
-      packageId: selectedPackage,
-      userName: request.userName ?? "Client",
-      answers: (request.answersJson as Record<string, unknown>) ?? {},
-      reportTitle:
-        request.previewTitle ?? `${getCategoryByValue(request.category)?.reportTitle ?? "Personalized Report"} for ${request.userName ?? "You"}`
-    });
-
-    if (!content.title?.trim() || content.pages.length === 0) {
-      throw new Error("Report content generation returned empty output.");
-    }
-
-    const pdfBuffer = await renderReportPdf({
-      content,
-      category: request.category,
-      packageId: selectedPackage,
-      userName: request.userName ?? "Client",
-      createdAt: new Date()
-    });
-
-    if (!pdfBuffer || pdfBuffer.length < 1200) {
-      throw new Error("Report PDF generation returned an invalid file.");
-    }
-
-    const pdfBase64 = pdfBuffer.toString("base64");
-    const pdfUrl = `${getBaseUrl()}/api/reports/${requestId}/download`;
+    const assets = await buildPaidReportAssets(requestId, request);
 
     const report = await completeGeneratedReport({
       requestId,
-      title: content.title,
-      content,
-      pdfBase64,
-      pdfUrl
+      title: assets.title,
+      content: assets.content,
+      pdfBase64: null,
+      pdfUrl: assets.pdfUrl
     });
 
-    if (!report?.pdfUrl || !report.pdfBase64) {
-      throw new Error("Report PDF could not be stored correctly.");
+    if (!report?.pdfUrl) {
+      throw new Error("Report metadata could not be stored correctly.");
     }
 
     await setReportGenerationState(requestId, GenerationStatus.COMPLETED);
     await sendReportEmail({
       requestId,
       request,
-      pdfBase64,
-      pdfUrl,
-      title: content.title
+      pdfBase64: assets.pdfBase64,
+      pdfUrl: assets.pdfUrl,
+      title: assets.title
     });
 
     return report;
