@@ -37,7 +37,8 @@ export async function POST(request: Request) {
       productVersion: product.fileVersion
     });
 
-    const baseUrl = getBaseUrl();
+    const requestOrigin = new URL(request.url).origin;
+    const baseUrl = requestOrigin || getBaseUrl();
     const successUrl = `${baseUrl}/collection/success?purchaseId=${purchase.id}`;
 
     if (!stripe) {
@@ -94,12 +95,16 @@ export async function POST(request: Request) {
       );
     }
 
-    await setCollectionCheckoutPending({
-      purchaseId: purchase.id,
-      paymentStatus: PaymentStatus.PENDING,
-      checkoutUrl: session.url,
-      stripeSessionId: session.id
-    });
+    try {
+      await setCollectionCheckoutPending({
+        purchaseId: purchase.id,
+        paymentStatus: PaymentStatus.PENDING,
+        checkoutUrl: session.url,
+        stripeSessionId: session.id
+      });
+    } catch (error) {
+      console.error('Collection checkout session created but pending state could not be saved', error);
+    }
 
     return NextResponse.json({ url: session.url, productSlug: product.slug });
   } catch (error) {

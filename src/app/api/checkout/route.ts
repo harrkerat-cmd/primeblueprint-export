@@ -55,7 +55,8 @@ export async function POST(request: Request) {
     }
 
     const packageTier = selectedPackage.id as PackageTier;
-    const baseUrl = getBaseUrl();
+    const requestOrigin = new URL(request.url).origin;
+    const baseUrl = requestOrigin || getBaseUrl();
     const successUrl = `${baseUrl}/success?requestId=${reportRequest.id}`;
 
     if (reportRequest.paymentStatus === PaymentStatus.PAID) {
@@ -140,22 +141,26 @@ export async function POST(request: Request) {
       );
     }
 
-    await setCheckoutPending({
-      requestId: reportRequest.id,
-      packageTier,
-      paymentStatus: PaymentStatus.PENDING,
-      checkoutUrl: session.url,
-      stripeSessionId: session.id
-    });
+    try {
+      await setCheckoutPending({
+        requestId: reportRequest.id,
+        packageTier,
+        paymentStatus: PaymentStatus.PENDING,
+        checkoutUrl: session.url,
+        stripeSessionId: session.id
+      });
 
-    await createPendingPayment({
-      requestId: reportRequest.id,
-      packageTier,
-      amount: selectedPackage.price,
-      status: PaymentStatus.PENDING,
-      stripeCheckoutSessionId: session.id,
-      stripeCustomerEmail: reportRequest.email ?? undefined
-    });
+      await createPendingPayment({
+        requestId: reportRequest.id,
+        packageTier,
+        amount: selectedPackage.price,
+        status: PaymentStatus.PENDING,
+        stripeCheckoutSessionId: session.id,
+        stripeCustomerEmail: reportRequest.email ?? undefined
+      });
+    } catch (error) {
+      console.error("Checkout session created but pending state could not be saved", error);
+    }
 
     return NextResponse.json({ url: session.url, packageId: selectedPackage.id });
   } catch (error) {
