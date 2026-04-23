@@ -53,6 +53,20 @@ export async function GET(
     }
   }
 
+  if (
+    reportRequest &&
+    reportRequest.paymentStatus === "PAID" &&
+    reportRequest.report?.generationStatus === "FAILED" &&
+    !reportRequest.report?.pdfBase64
+  ) {
+    try {
+      await processPaidReport(requestId);
+      reportRequest = await getReportRequest(requestId);
+    } catch (error) {
+      console.error("[api/reports/status] Failed to retry paid report generation.", error);
+    }
+  }
+
   if (!reportRequest) {
     return NextResponse.json({ error: "Report request not found." }, { status: 404 });
   }
