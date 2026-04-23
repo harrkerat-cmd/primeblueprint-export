@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Loader2, MoveLeft, MoveRight, RotateCcw } from "lucide-react";
+import { AlertTriangle, Loader2, MoveLeft, MoveRight } from "lucide-react";
 import { useForm } from "react-hook-form";
 import type { ReportCategory } from "@prisma/client";
 import { Button } from "@/components/shared/button";
@@ -38,7 +38,6 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
   const [screenState, setScreenState] = useState<"loading" | "form">("loading");
   const [statusMessage, setStatusMessage] = useState("Preparing your questionnaire...");
   const [launchError, setLaunchError] = useState<string | null>(null);
-  const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   const form = useForm<QuestionnaireValues>({
@@ -173,11 +172,6 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
     }
   }, [stepIndex, visibleQuestions.length]);
 
-  const handleStartFresh = useCallback(async () => {
-    setShowResetConfirm(false);
-    await createFreshRequest(requestId);
-  }, [createFreshRequest, requestId]);
-
   const handleNext = async () => {
     if (!currentQuestion) {
       return;
@@ -264,18 +258,10 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
           <p className="mt-4 text-sm leading-7 text-amber-800">
             To keep the report flow safe, we recommend starting again with a clean blank questionnaire.
           </p>
-          <Button className="mt-6" onClick={() => setShowResetConfirm(true)}>
-            Start a fresh report
+          <Button className="mt-6" onClick={() => void createFreshRequest(requestId)}>
+            Start again
           </Button>
         </div>
-        {showResetConfirm ? (
-          <ConfirmResetModal
-            onCancel={() => setShowResetConfirm(false)}
-            onConfirm={() => {
-              void handleStartFresh();
-            }}
-          />
-        ) : null}
       </Container>
     );
   }
@@ -293,12 +279,6 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
             <ProgressBar value={progress} />
           </div>
           <p className="mt-6 text-sm text-slate-500">{statusMessage}</p>
-          <div className="mt-6">
-            <Button variant="ghost" className="w-full justify-center" onClick={() => setShowResetConfirm(true)}>
-              <RotateCcw className="h-4 w-4" />
-              Start a fresh report
-            </Button>
-          </div>
         </aside>
 
         <div className="rounded-[32px] border border-slate-200 bg-white p-6 shadow-premium sm:p-8">
@@ -326,35 +306,6 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
           </div>
         </div>
       </div>
-
-      {showResetConfirm ? (
-        <ConfirmResetModal
-          onCancel={() => setShowResetConfirm(false)}
-          onConfirm={() => {
-            void handleStartFresh();
-          }}
-        />
-      ) : null}
     </Container>
-  );
-}
-
-function ConfirmResetModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/45 px-4">
-      <div className="w-full max-w-md rounded-[28px] border border-slate-200 bg-white p-6 shadow-premium">
-        <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Confirm reset</p>
-        <h2 className="mt-4 font-display text-3xl text-navy-950">Start a fresh report?</h2>
-        <p className="mt-4 text-sm leading-7 text-slate-600">
-          This will open a new blank questionnaire for this category and clear the current answers from this attempt.
-        </p>
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
-          <Button variant="secondary" onClick={onCancel}>
-            Keep current answers
-          </Button>
-          <Button onClick={onConfirm}>Start fresh</Button>
-        </div>
-      </div>
-    </div>
   );
 }
