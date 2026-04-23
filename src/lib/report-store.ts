@@ -57,7 +57,7 @@ type StoredGeneratedReport = {
   updatedAt: string;
   reportRequestId: string;
   title: string;
-  contentJson: GeneratedReportContent | Record<string, never>;
+  contentJson: GeneratedReportContent | StoredGeneratedReportSummary | Record<string, never>;
   pdfBase64: string | null;
   pdfUrl: string | null;
   generationStatus: GenerationStatus;
@@ -103,6 +103,16 @@ type LocalStore = {
   generatedReports: StoredGeneratedReport[];
   emailLogs: StoredEmailLog[];
   constructionLeadInterests: StoredLeadInterest[];
+};
+
+type StoredGeneratedReportSummary = {
+  title: string;
+  categoryLabel: string;
+  packageName: string;
+  preparedFor: string;
+  goal: string;
+  pageCount: number;
+  generatedAtLabel: string;
 };
 
 const emptyStore: LocalStore = {
@@ -169,6 +179,18 @@ async function updateLocalStore<T>(updater: (store: LocalStore) => T | Promise<T
 
 function nowIso() {
   return new Date().toISOString();
+}
+
+function buildStoredGeneratedReportSummary(content: GeneratedReportContent): StoredGeneratedReportSummary {
+  return {
+    title: content.title,
+    categoryLabel: content.categoryLabel,
+    packageName: content.packageName,
+    preparedFor: content.preparedFor,
+    goal: content.goal,
+    pageCount: content.pages.length,
+    generatedAtLabel: content.createdAtLabel
+  };
 }
 
 function buildPreviewTitle(category: ReportCategory, userName?: string | null) {
@@ -865,7 +887,7 @@ export async function completeGeneratedReport({
       where: { reportRequestId: requestId },
       data: {
         title,
-        contentJson: content,
+        contentJson: buildStoredGeneratedReportSummary(content) as Prisma.InputJsonValue,
         pdfBase64,
         pdfUrl,
         generationStatus: GenerationStatus.COMPLETED,
@@ -884,7 +906,7 @@ export async function completeGeneratedReport({
 
     report.updatedAt = timestamp;
     report.title = title;
-    report.contentJson = content;
+    report.contentJson = buildStoredGeneratedReportSummary(content);
     report.pdfBase64 = pdfBase64;
     report.pdfUrl = pdfUrl;
     report.generationStatus = GenerationStatus.COMPLETED;
