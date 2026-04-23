@@ -21,7 +21,7 @@ const steps = [
     description:
       "The questionnaire is designed like a premium consultation. Questions appear step by step, answer options are easy to understand, and only relevant follow-up questions show next.",
     detail:
-      "Progress is saved as a draft, the wording stays simple, and the branching logic helps the final report feel more tailored."
+      "Each new report starts from a clean blank questionnaire, the wording stays simple, and the branching logic helps the final report feel more tailored."
   },
   {
     id: "03",
@@ -37,7 +37,7 @@ const steps = [
     icon: CreditCard,
     title: "Choose a package and complete secure checkout",
     description:
-      "The user picks the package that fits the depth they want and moves into secure Stripe Checkout in GBP. Only after payment is confirmed do we generate the final PDF.",
+      "The user picks the package that fits the depth they want and moves into secure Stripe Checkout in GBP. Apple Pay or PayPal can also appear when the Stripe account and device support them. Only after payment is confirmed do we generate the final PDF.",
     detail:
       "This keeps the payment flow reliable, protects against duplicate generation, and gives users a clean checkout experience on desktop and mobile."
   }

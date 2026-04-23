@@ -104,6 +104,7 @@ export function CollectionPurchasePanel({ product }: { product: CollectionProduc
           value={customerName}
           onChange={(event) => setCustomerName(event.target.value)}
           placeholder="Your name (optional)"
+          autoComplete="name"
           className="w-full rounded-[20px] border border-slate-200 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300"
         />
         <input
@@ -111,6 +112,9 @@ export function CollectionPurchasePanel({ product }: { product: CollectionProduc
           onChange={(event) => setEmail(event.target.value)}
           type="email"
           placeholder="Email for delivery"
+          autoComplete="email"
+          inputMode="email"
+          autoCapitalize="none"
           className="w-full rounded-[20px] border border-slate-200 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-slate-300"
         />
       </div>
@@ -129,7 +133,7 @@ export function CollectionPurchasePanel({ product }: { product: CollectionProduc
         </div>
         <div className="inline-flex items-center gap-2 rounded-full border border-slate-200 px-4 py-2">
           <ShieldCheck className="h-4 w-4" />
-          Secure checkout in GBP
+          Secure checkout in GBP with cards, Apple Pay, or PayPal where available
         </div>
       </div>
     </div>

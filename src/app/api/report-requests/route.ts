@@ -2,7 +2,7 @@ export const runtime = "nodejs";
 
 import { type NextRequest, NextResponse } from "next/server";
 import { ReportCategory } from "@prisma/client";
-import { createReportRequest, getLatestResumableReportRequest } from "@/lib/db/report-requests";
+import { createReportRequest } from "@/lib/db/report-requests";
 
 export async function GET(request: NextRequest) {
   const categoryParam = request.nextUrl.searchParams.get("category");
@@ -11,13 +11,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ draft: null });
   }
 
-  try {
-    const draft = await getLatestResumableReportRequest(categoryParam as ReportCategory);
-    return NextResponse.json({ draft });
-  } catch (error) {
-    console.error("[api/report-requests] Failed to load latest draft.", error);
-    return NextResponse.json({ draft: null }, { status: 500 });
-  }
+  return NextResponse.json({ draft: null });
 }
 
 export async function POST(request: NextRequest) {

@@ -66,7 +66,6 @@ export async function POST(request: Request) {
       mode: 'payment',
       success_url: successUrl,
       cancel_url: cancelUrl,
-      payment_method_types: ['card'],
       customer_email: parsed.data.email,
       metadata: {
         productType: 'collection_pdf',

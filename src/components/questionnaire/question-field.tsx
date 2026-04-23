@@ -13,6 +13,8 @@ export function QuestionField({
   form: UseFormReturn<QuestionnaireValues>;
 }) {
   const error = form.formState.errors[question.id]?.message;
+  const isEmailField = question.id === "email";
+  const isNameField = question.id === "fullName";
 
   return (
     <div className="space-y-6">
@@ -29,8 +31,12 @@ export function QuestionField({
             return (
               <input
                 {...field}
+                type={isEmailField ? "email" : "text"}
                 value={typeof field.value === "string" ? field.value : ""}
                 placeholder={question.placeholder}
+                autoComplete={isEmailField ? "email" : isNameField ? "name" : "on"}
+                inputMode={isEmailField ? "email" : undefined}
+                autoCapitalize={isEmailField ? "none" : "words"}
                 className="w-full rounded-[24px] border border-slate-200 bg-white px-5 py-4 text-base text-navy-950 outline-none transition focus:border-navy-900"
               />
             );

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useMemo, useState, useTransition } from "react"
 import { useRouter, useSearchParams } from "next/navigation";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { AnimatePresence, motion } from "framer-motion";
-import { AlertTriangle, Loader2, MoveLeft, MoveRight, RotateCcw, Save } from "lucide-react";
+import { AlertTriangle, Loader2, MoveLeft, MoveRight, RotateCcw } from "lucide-react";
 import { useForm } from "react-hook-form";
 import type { ReportCategory } from "@prisma/client";
 import { Button } from "@/components/shared/button";
@@ -13,15 +13,7 @@ import { ProgressBar } from "@/components/questionnaire/progress-bar";
 import { QuestionField } from "@/components/questionnaire/question-field";
 import { Container } from "@/components/shared/container";
 import { getVisibleQuestions } from "@/lib/questions";
-import {
-  addIgnoredDraftId,
-  clearQuestionnaireSession,
-  clearLegacyQuestionnaireDraft,
-  getQuestionnaireDraftStorageKey,
-  readIgnoredDraftIds,
-  removeIgnoredDraftId,
-  setActiveQuestionnaireRequest
-} from "@/lib/questionnaire-session";
+import { clearLegacyQuestionnaireDraft } from "@/lib/questionnaire-session";
 import type { QuestionnaireValues } from "@/lib/types";
 import { questionnaireStorageSchema, validateQuestion } from "@/lib/validations/questionnaire";
 
@@ -30,12 +22,8 @@ const transition = { duration: 0.4, ease: "easeOut" as const };
 type ReportRequestPayload = {
   id: string;
   answersJson?: QuestionnaireValues;
-  updatedAt?: string;
-  userName?: string | null;
-  email?: string | null;
   lastSavedStep?: string | null;
   paymentStatus?: string;
-  category?: ReportCategory;
 };
 
 export function QuestionnaireClient({ category }: { category: ReportCategory }) {
@@ -47,9 +35,9 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
 
   const [requestId, setRequestId] = useState<string | null>(initialRequestId);
   const [stepIndex, setStepIndex] = useState(0);
-  const [screenState, setScreenState] = useState<"loading" | "choice" | "form">(initialRequestId ? "form" : "loading");
-  const [saveState, setSaveState] = useState(initialRequestId ? "Checking your draft..." : "Preparing your private draft...");
-  const [resumeDraft, setResumeDraft] = useState<ReportRequestPayload | null>(null);
+  const [screenState, setScreenState] = useState<"loading" | "form">("loading");
+  const [statusMessage, setStatusMessage] = useState("Preparing your questionnaire...");
+  const [launchError, setLaunchError] = useState<string | null>(null);
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [isPending, startTransition] = useTransition();
 
@@ -59,7 +47,6 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
   });
 
   const watchedValues = form.watch();
-  const storageKey = requestId ? getQuestionnaireDraftStorageKey(category, requestId) : null;
   const visibleQuestions = useMemo(() => getVisibleQuestions(category, watchedValues), [category, watchedValues]);
   const currentQuestion = visibleQuestions[stepIndex];
   const progress = Math.max(8, Math.round(((stepIndex + 1) / Math.max(visibleQuestions.length, 1)) * 100));
@@ -77,20 +64,18 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
   }, [category]);
 
   const createFreshRequest = useCallback(
-    async (ignoredRequestId?: string | null) => {
-      if (ignoredRequestId) {
-        await fetch(`/api/report-requests/${ignoredRequestId}`, {
-          method: "DELETE"
-        });
-        addIgnoredDraftId(category, ignoredRequestId);
-        clearQuestionnaireSession(category, ignoredRequestId);
-      }
-
+    async (replacedRequestId?: string | null) => {
       setScreenState("loading");
-      setResumeDraft(null);
-      setSaveState("Preparing your fresh draft...");
+      setLaunchError(null);
+      setStatusMessage("Preparing your questionnaire...");
       setStepIndex(0);
       form.reset({});
+
+      if (replacedRequestId) {
+        await fetch(`/api/report-requests/${replacedRequestId}`, {
+          method: "DELETE"
+        });
+      }
 
       const response = await fetch("/api/report-requests", {
         method: "POST",
@@ -99,139 +84,88 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
       });
 
       if (!response.ok) {
-        setSaveState("We could not create your draft yet.");
+        setLaunchError("We could not start your questionnaire yet.");
         return;
       }
 
       const data = await readJson<{ id?: string }>(response);
       if (!data?.id) {
-        setSaveState("We could not create your draft yet.");
+        setLaunchError("We could not start your questionnaire yet.");
         return;
       }
 
-      removeIgnoredDraftId(category, data.id);
-      setActiveQuestionnaireRequest(category, data.id);
       setRequestId(data.id);
       setScreenState("form");
-      setSaveState("Fresh draft ready");
+      setStatusMessage("Questionnaire ready");
       router.replace(`/questionnaire/${categorySlug}?requestId=${data.id}`);
     },
     [category, categorySlug, form, readJson, router]
   );
 
   useEffect(() => {
-    if (initialRequestId) {
-      setRequestId(initialRequestId);
-      setScreenState("form");
-      return;
-    }
-
     let cancelled = false;
 
-    async function loadDraftChoice() {
+    async function loadQuestionnaire() {
+      if (!initialRequestId) {
+        await createFreshRequest();
+        return;
+      }
+
       setScreenState("loading");
-      const response = await fetch(`/api/report-requests?category=${category}`, { cache: "no-store" });
-      const data = response.ok ? await readJson<{ draft?: ReportRequestPayload | null }>(response) : null;
-      const draft = data?.draft ?? null;
-      const ignoredDraftIds = readIgnoredDraftIds(category);
+      setLaunchError(null);
+      setStatusMessage("Loading your questionnaire...");
+      setRequestId(initialRequestId);
+
+      const response = await fetch(`/api/report-requests/${initialRequestId}`, { cache: "no-store" });
 
       if (cancelled) {
         return;
       }
 
-      if (draft && !ignoredDraftIds.includes(draft.id)) {
-        setResumeDraft(draft);
-        setScreenState("choice");
-        setSaveState("Unfinished draft found");
-        return;
-      }
-
-      await createFreshRequest();
-    }
-
-    void loadDraftChoice();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [category, createFreshRequest, initialRequestId, readJson]);
-
-  useEffect(() => {
-    async function hydrateCurrentRequest() {
-      if (!requestId || screenState !== "form") {
-        return;
-      }
-
-      setSaveState("Loading your draft...");
-
-      let localValues: QuestionnaireValues = {};
-      if (storageKey) {
-        const localDraft = window.localStorage.getItem(storageKey);
-        if (localDraft) {
-          try {
-            const parsed = questionnaireStorageSchema.safeParse(JSON.parse(localDraft));
-            if (parsed.success) {
-              localValues = parsed.data;
-            } else {
-              window.localStorage.removeItem(storageKey);
-            }
-          } catch {
-            window.localStorage.removeItem(storageKey);
-          }
-        }
-      }
-
-      const response = await fetch(`/api/report-requests/${requestId}`, { cache: "no-store" });
       if (!response.ok) {
-        setSaveState("This draft could not be loaded.");
+        await createFreshRequest(initialRequestId);
         return;
       }
 
       const data = await readJson<ReportRequestPayload>(response);
+
+      if (cancelled) {
+        return;
+      }
+
       if (!data) {
-        setSaveState("This draft could not be loaded.");
+        await createFreshRequest(initialRequestId);
         return;
       }
 
       if (data.paymentStatus && data.paymentStatus !== "DRAFT") {
-        clearQuestionnaireSession(category, requestId);
-        await createFreshRequest(requestId);
+        await createFreshRequest(initialRequestId);
         return;
       }
 
       const serverValues = questionnaireStorageSchema.safeParse(data.answersJson ?? {});
-      const mergedValues = {
-        ...(serverValues.success ? serverValues.data : {}),
-        ...localValues
-      };
+      const hydratedValues = serverValues.success ? serverValues.data : {};
+      form.reset(hydratedValues);
 
-      form.reset(mergedValues);
-      if (storageKey) {
-        window.localStorage.setItem(storageKey, JSON.stringify(mergedValues));
-      }
-
-      const mergedQuestions = getVisibleQuestions(category, mergedValues);
+      const hydratedQuestions = getVisibleQuestions(category, hydratedValues);
       const savedStepIndex = data.lastSavedStep
         ? Math.max(
-            mergedQuestions.findIndex((question) => question.id === data.lastSavedStep),
+            hydratedQuestions.findIndex((question) => question.id === data.lastSavedStep),
             0
           )
         : 0;
+
       setStepIndex(savedStepIndex);
-      setSaveState(Object.keys(mergedValues).length > 0 ? "Draft restored" : "Fresh draft ready");
-      setActiveQuestionnaireRequest(category, requestId);
+      setScreenState("form");
+      setStatusMessage("Questionnaire ready");
     }
 
-    void hydrateCurrentRequest();
-  }, [category, createFreshRequest, form, readJson, requestId, screenState, storageKey]);
+    void loadQuestionnaire();
 
-  useEffect(() => {
-    if (!requestId || !storageKey || screenState !== "form") {
-      return;
-    }
-
-    window.localStorage.setItem(storageKey, JSON.stringify(watchedValues));
-  }, [requestId, screenState, storageKey, watchedValues]);
+    return () => {
+      cancelled = true;
+    };
+  }, [category, createFreshRequest, form, initialRequestId, readJson]);
 
   useEffect(() => {
     if (stepIndex > visibleQuestions.length - 1) {
@@ -239,46 +173,10 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
     }
   }, [stepIndex, visibleQuestions.length]);
 
-  useEffect(() => {
-    if (!requestId || screenState !== "form") {
-      return;
-    }
-
-    const timer = window.setTimeout(async () => {
-      setSaveState("Saving draft...");
-      const response = await fetch(`/api/report-requests/${requestId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          category,
-          answers: watchedValues,
-          lastSavedStep: currentQuestion?.id
-        })
-      });
-
-      setSaveState(response.ok ? "Draft saved" : "Save failed - working locally");
-    }, 500);
-
-    return () => window.clearTimeout(timer);
-  }, [category, currentQuestion?.id, requestId, screenState, watchedValues]);
-
-  const handleResumeDraft = useCallback(() => {
-    if (!resumeDraft?.id) {
-      return;
-    }
-
-    removeIgnoredDraftId(category, resumeDraft.id);
-    setActiveQuestionnaireRequest(category, resumeDraft.id);
-    setRequestId(resumeDraft.id);
-    setScreenState("form");
-    setSaveState("Loading your saved draft...");
-    router.replace(`/questionnaire/${categorySlug}?requestId=${resumeDraft.id}`);
-  }, [category, categorySlug, resumeDraft?.id, router]);
-
   const handleStartFresh = useCallback(async () => {
     setShowResetConfirm(false);
-    await createFreshRequest(requestId ?? resumeDraft?.id ?? null);
-  }, [createFreshRequest, requestId, resumeDraft?.id]);
+    await createFreshRequest(requestId);
+  }, [createFreshRequest, requestId]);
 
   const handleNext = async () => {
     if (!currentQuestion) {
@@ -294,6 +192,30 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
     form.clearErrors(currentQuestion.id);
 
     if (stepIndex === visibleQuestions.length - 1) {
+      if (!requestId) {
+        setLaunchError("We could not prepare your preview. Please start again.");
+        setScreenState("loading");
+        return;
+      }
+
+      setStatusMessage("Preparing your preview...");
+      const response = await fetch(`/api/report-requests/${requestId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          category,
+          answers: watchedValues,
+          lastSavedStep: currentQuestion.id
+        })
+      });
+
+      if (!response.ok) {
+        setStatusMessage("Questionnaire ready");
+        setLaunchError("We could not prepare your preview. Please try again.");
+        setScreenState("loading");
+        return;
+      }
+
       startTransition(() => {
         router.push(`/preview/${requestId}`);
       });
@@ -308,72 +230,25 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
   };
 
   if (screenState === "loading") {
-    const isLaunchError = saveState.includes("could not");
     return (
       <Container className="py-20">
         <div className="rounded-[32px] border border-slate-200 bg-white p-10 shadow-soft">
           <div className="flex items-center gap-3 text-slate-500">
-            {isLaunchError ? <AlertTriangle className="h-5 w-5 text-amber-700" /> : <Loader2 className="h-5 w-5 animate-spin" />}
-            {saveState}
+            {launchError ? <AlertTriangle className="h-5 w-5 text-amber-700" /> : <Loader2 className="h-5 w-5 animate-spin" />}
+            {launchError ?? statusMessage}
           </div>
-          {isLaunchError ? (
+          {launchError ? (
             <div className="mt-6">
               <Button
                 onClick={() => {
                   void createFreshRequest();
                 }}
               >
-                Retry fresh draft
+                Try again
               </Button>
             </div>
           ) : null}
         </div>
-      </Container>
-    );
-  }
-
-  if (screenState === "choice") {
-    return (
-      <Container className="py-16 sm:py-20">
-        <div className="mx-auto max-w-3xl rounded-[32px] border border-slate-200 bg-white p-8 shadow-premium sm:p-10">
-          <BadgeLine label="Saved draft found" />
-          <h1 className="mt-5 font-display text-4xl tracking-tight text-navy-950 sm:text-5xl">
-            Resume your previous draft or start fresh
-          </h1>
-          <p className="mt-4 max-w-2xl text-base leading-8 text-slate-600 sm:text-lg">
-            We found an unfinished {categoryMeta?.title?.toLowerCase()} report draft. Choose whether you want to continue from where you left off or start again with a clean blank form.
-          </p>
-
-          <div className="mt-8 rounded-[28px] border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
-            <p className="font-semibold text-navy-950">Draft details</p>
-            <div className="mt-4 grid gap-3 sm:grid-cols-2">
-              <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Name</p>
-                <p className="mt-2 text-sm text-slate-700">{resumeDraft?.userName ?? 'Not added yet'}</p>
-              </div>
-              <div className="rounded-[20px] border border-slate-200 bg-white px-4 py-4">
-                <p className="text-xs uppercase tracking-[0.22em] text-slate-400">Last saved step</p>
-                <p className="mt-2 text-sm text-slate-700">{resumeDraft?.lastSavedStep ?? 'Earlier in the flow'}</p>
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-8 flex flex-col gap-4 sm:flex-row">
-            <Button onClick={handleResumeDraft}>Resume previous draft</Button>
-            <Button variant="secondary" onClick={() => setShowResetConfirm(true)}>
-              Start a fresh report
-            </Button>
-          </div>
-        </div>
-
-        {showResetConfirm ? (
-          <ConfirmResetModal
-            onCancel={() => setShowResetConfirm(false)}
-            onConfirm={() => {
-              void handleStartFresh();
-            }}
-          />
-        ) : null}
       </Container>
     );
   }
@@ -384,10 +259,10 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
         <div className="rounded-[32px] border border-amber-200 bg-amber-50 p-8 shadow-soft">
           <div className="flex items-center gap-3 text-amber-800">
             <AlertTriangle className="h-5 w-5" />
-            <p className="font-semibold">We could not restore this draft cleanly.</p>
+            <p className="font-semibold">We could not load this questionnaire cleanly.</p>
           </div>
           <p className="mt-4 text-sm leading-7 text-amber-800">
-            To keep the launch flow safe, we recommend starting a fresh report instead of using a broken draft state.
+            To keep the report flow safe, we recommend starting again with a clean blank questionnaire.
           </p>
           <Button className="mt-6" onClick={() => setShowResetConfirm(true)}>
             Start a fresh report
@@ -412,15 +287,12 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
           <p className="text-xs uppercase tracking-[0.28em] text-slate-400">Questionnaire</p>
           <h1 className="mt-4 font-display text-4xl text-navy-950">{categoryMeta?.title}</h1>
           <p className="mt-4 text-sm leading-7 text-slate-600">
-            One clear step at a time. This draft only belongs to the current report attempt.
+            One clear step at a time. Every new report starts from a blank questionnaire.
           </p>
           <div className="mt-8">
             <ProgressBar value={progress} />
           </div>
-          <div className="mt-6 flex items-center gap-2 text-sm text-slate-500">
-            <Save className="h-4 w-4" />
-            {saveState}
-          </div>
+          <p className="mt-6 text-sm text-slate-500">{statusMessage}</p>
           <div className="mt-6">
             <Button variant="ghost" className="w-full justify-center" onClick={() => setShowResetConfirm(true)}>
               <RotateCcw className="h-4 w-4" />
@@ -467,14 +339,6 @@ export function QuestionnaireClient({ category }: { category: ReportCategory }) 
   );
 }
 
-function BadgeLine({ label }: { label: string }) {
-  return (
-    <div className="inline-flex rounded-full border border-slate-200 bg-slate-50 px-4 py-2 text-xs font-semibold uppercase tracking-[0.24em] text-slate-500">
-      {label}
-    </div>
-  );
-}
-
 function ConfirmResetModal({ onCancel, onConfirm }: { onCancel: () => void; onConfirm: () => void }) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-navy-950/45 px-4">
@@ -482,11 +346,11 @@ function ConfirmResetModal({ onCancel, onConfirm }: { onCancel: () => void; onCo
         <p className="text-xs uppercase tracking-[0.24em] text-slate-400">Confirm reset</p>
         <h2 className="mt-4 font-display text-3xl text-navy-950">Start a fresh report?</h2>
         <p className="mt-4 text-sm leading-7 text-slate-600">
-          This will open a new blank questionnaire for this category and stop using the current saved draft in this browser.
+          This will open a new blank questionnaire for this category and clear the current answers from this attempt.
         </p>
         <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-end">
           <Button variant="secondary" onClick={onCancel}>
-            Keep current draft
+            Keep current answers
           </Button>
           <Button onClick={onConfirm}>Start fresh</Button>
         </div>

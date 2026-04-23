@@ -58,9 +58,9 @@ export async function PATCH(
       lastSavedStep: body.lastSavedStep
     });
   } catch (error) {
-    console.error("[api/report-requests/[requestId]] Failed to save draft.", error);
+    console.error("[api/report-requests/[requestId]] Failed to save questionnaire answers.", error);
     return NextResponse.json(
-      { error: "Draft saving is temporarily unavailable. Persistent storage is required in production." },
+      { error: "Questionnaire saving is temporarily unavailable. Persistent storage is required in production." },
       { status: 500 }
     );
   }
@@ -77,9 +77,9 @@ export async function DELETE(
   try {
     reportRequest = await clearDraftReportRequest(requestId);
   } catch (error) {
-    console.error("[api/report-requests/[requestId]] Failed to clear draft.", error);
+    console.error("[api/report-requests/[requestId]] Failed to clear questionnaire request.", error);
     return NextResponse.json(
-      { error: "Draft reset is temporarily unavailable. Persistent storage is required in production." },
+      { error: "Questionnaire reset is temporarily unavailable. Persistent storage is required in production." },
       { status: 500 }
     );
   }

@@ -112,7 +112,6 @@ export async function POST(request: Request) {
       mode: "payment",
       success_url: successUrl,
       cancel_url: cancelUrl,
-      payment_method_types: ["card"],
       customer_email: reportRequest.email ?? undefined,
       metadata: {
         requestId: reportRequest.id,
