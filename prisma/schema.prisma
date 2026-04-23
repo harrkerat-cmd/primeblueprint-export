@@ -1,0 +1,213 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum ReportCategory {
+  FINANCE_MONEY
+  FITNESS_HEALTH
+  BUSINESS_CAREER
+  SOCIAL_GROWTH
+  CONSTRUCTION_GROWTH
+}
+
+enum PackageTier {
+  STARTER
+  PREMIUM
+}
+
+enum PaymentStatus {
+  DRAFT
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum GenerationStatus {
+  NOT_STARTED
+  QUEUED
+  GENERATING
+  COMPLETED
+  FAILED
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model User {
+  id             String          @id @default(cuid())
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+  email          String          @unique
+  fullName       String?
+  country        String?
+  reportRequests ReportRequest[]
+}
+
+model ReportRequest {
+  id                  String                     @id @default(cuid())
+  createdAt           DateTime                   @default(now())
+  updatedAt           DateTime                   @updatedAt
+  category            ReportCategory
+  selectedPackage     PackageTier?
+  userId              String?
+  user                User?                      @relation(fields: [userId], references: [id])
+  userName            String?
+  email               String?
+  ageRange            String?
+  country             String?
+  optionalGender      String?
+  mainGoal            String?
+  previewTitle        String?
+  draftCompletedAt    DateTime?
+  paymentStatus       PaymentStatus              @default(DRAFT)
+  generationStatus    GenerationStatus           @default(NOT_STARTED)
+  emailStatus         EmailStatus                @default(PENDING)
+  answersJson         Json                       @default("{}")
+  lastSavedStep       String?
+  checkoutUrl         String?
+  stripeSessionId     String?                    @unique
+  report              GeneratedReport?
+  answers             Answer[]
+  payments            Payment[]
+  emailLogs           EmailLog[]
+  constructionLeads   ConstructionLeadInterest[]
+
+  @@index([category])
+  @@index([paymentStatus])
+}
+
+model Answer {
+  id              String         @id @default(cuid())
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  reportRequestId String
+  reportRequest   ReportRequest  @relation(fields: [reportRequestId], references: [id], onDelete: Cascade)
+  category        ReportCategory
+  questionKey     String
+  value           Json
+
+  @@unique([reportRequestId, questionKey])
+  @@index([reportRequestId])
+}
+
+model Payment {
+  id                      String        @id @default(cuid())
+  createdAt               DateTime      @default(now())
+  updatedAt               DateTime      @updatedAt
+  reportRequestId         String
+  reportRequest           ReportRequest @relation(fields: [reportRequestId], references: [id], onDelete: Cascade)
+  packageTier             PackageTier
+  amount                  Int
+  currency                String        @default("gbp")
+  status                  PaymentStatus @default(PENDING)
+  stripeCheckoutSessionId String?       @unique
+  stripePaymentIntentId   String?
+  stripeCustomerEmail     String?
+  webhookProcessedAt      DateTime?
+
+  @@index([reportRequestId])
+}
+
+model GeneratedReport {
+  id               String           @id @default(cuid())
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  reportRequestId  String           @unique
+  reportRequest    ReportRequest    @relation(fields: [reportRequestId], references: [id], onDelete: Cascade)
+  title            String
+  contentJson      Json
+  pdfBase64        String?
+  pdfUrl           String?
+  generationStatus GenerationStatus @default(QUEUED)
+  generationError  String?
+  generatedAt      DateTime?
+}
+
+model EmailLog {
+  id                String        @id @default(cuid())
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  reportRequestId   String
+  reportRequest     ReportRequest @relation(fields: [reportRequestId], references: [id], onDelete: Cascade)
+  recipient         String
+  subject           String
+  provider          String        @default("resend")
+  status            EmailStatus   @default(PENDING)
+  providerMessageId String?
+  errorMessage      String?
+
+  @@index([reportRequestId])
+}
+
+model CollectionPurchase {
+  id              String              @id @default(cuid())
+  createdAt       DateTime            @default(now())
+  updatedAt       DateTime            @updatedAt
+  productSlug     String
+  productTitle    String
+  productCategory String
+  customerName    String?
+  email           String
+  amount          Int
+  currency        String              @default("gbp")
+  paymentStatus   PaymentStatus       @default(PENDING)
+  generationStatus GenerationStatus   @default(NOT_STARTED)
+  emailStatus     EmailStatus         @default(PENDING)
+  stripeSessionId String?             @unique
+  checkoutUrl     String?
+  pdfBase64       String?
+  pdfUrl          String?
+  generatedAt     DateTime?
+  productVersion  String              @default("v1")
+  emailLogs       CollectionEmailLog[]
+
+  @@index([productSlug])
+  @@index([paymentStatus])
+}
+
+model CollectionEmailLog {
+  id                   String             @id @default(cuid())
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime           @updatedAt
+  collectionPurchaseId String
+  collectionPurchase   CollectionPurchase @relation(fields: [collectionPurchaseId], references: [id], onDelete: Cascade)
+  recipient            String
+  subject              String
+  provider             String             @default("resend")
+  status               EmailStatus        @default(PENDING)
+  providerMessageId    String?
+  errorMessage         String?
+
+  @@index([collectionPurchaseId])
+}
+
+model ConstructionLeadInterest {
+  id              String        @id @default(cuid())
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  reportRequestId String
+  reportRequest   ReportRequest @relation(fields: [reportRequestId], references: [id], onDelete: Cascade)
+  planId          String
+  planName        String
+  price           Int
+  status          String        @default("REQUESTED")
+  paymentStatus   PaymentStatus @default(DRAFT)
+  stripeSessionId String?       @unique
+  checkoutUrl     String?
+  activatedAt     DateTime?
+  deliveryMethod  String        @default("manual_email")
+  userName        String?
+  email           String?
+  notes           String?
+
+  @@index([reportRequestId])
+}

@@ -1,0 +1,64 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "es2022"
+    ],
+    "allowJs": false,
+    "skipLibCheck": true,
+    "strict": true,
+    "noEmit": true,
+    "esModuleInterop": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "jsx": "react-jsx",
+    "incremental": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": [
+        "./src/*"
+      ]
+    },
+    "plugins": [
+      {
+        "name": "next"
+      }
+    ]
+  },
+  "include": [
+    "next-env.d.ts",
+    "src/app/**/*.ts",
+    "src/app/**/*.tsx",
+    "src/components/**/*.ts",
+    "src/components/**/*.tsx",
+    "src/config/**/*.ts",
+    "src/config/**/*.tsx",
+    "src/lib/report-store.ts",
+    "src/lib/prisma.ts",
+    "src/lib/utils.ts",
+    "src/lib/types.ts",
+    "src/lib/questions.ts",
+    "src/lib/openai.ts",
+    "src/lib/stripe.ts",
+    "src/lib/resend.ts",
+    "src/lib/report/**/*.ts",
+    "src/lib/report/**/*.tsx",
+    "src/lib/pdf/**/*.ts",
+    "src/lib/pdf/**/*.tsx",
+    "src/lib/db/**/*.ts",
+    "src/lib/validations/**/*.ts",
+    "prisma/**/*.ts",
+    ".next/types/**/*.ts",
+    "next.config.ts",
+    "tailwind.config.ts",
+    ".next/dev/types/**/*.ts"
+  ],
+  "exclude": [
+    "node_modules",
+    "src/lib/supabase.ts"
+  ]
+}
