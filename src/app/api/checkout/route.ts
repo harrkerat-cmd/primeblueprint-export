@@ -57,7 +57,7 @@ export async function POST(request: Request) {
     const packageTier = selectedPackage.id as PackageTier;
     const requestOrigin = new URL(request.url).origin;
     const baseUrl = requestOrigin || getBaseUrl();
-    const successUrl = `${baseUrl}/success?requestId=${reportRequest.id}`;
+    const successUrl = `${baseUrl}/success?requestId=${reportRequest.id}&session_id={CHECKOUT_SESSION_ID}`;
 
     if (reportRequest.paymentStatus === PaymentStatus.PAID) {
       return NextResponse.json({ url: successUrl, mode: "paid", packageId: selectedPackage.id });

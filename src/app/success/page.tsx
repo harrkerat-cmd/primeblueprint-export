@@ -7,9 +7,9 @@ export const dynamic = "force-dynamic";
 export default async function SuccessPage({
   searchParams
 }: {
-  searchParams: Promise<{ requestId?: string }>;
+  searchParams: Promise<{ requestId?: string; session_id?: string }>;
 }) {
-  const { requestId } = await searchParams;
+  const { requestId, session_id } = await searchParams;
 
   return (
     <Container className="py-16 sm:py-20">
@@ -21,7 +21,7 @@ export default async function SuccessPage({
         </p>
       </div>
       {requestId ? (
-        <ReportStatusCard requestId={requestId} />
+        <ReportStatusCard requestId={requestId} sessionId={session_id} />
       ) : (
         <div className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-soft">
           Missing request ID. Please return to your checkout confirmation link.

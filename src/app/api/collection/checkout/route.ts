@@ -39,7 +39,7 @@ export async function POST(request: Request) {
 
     const requestOrigin = new URL(request.url).origin;
     const baseUrl = requestOrigin || getBaseUrl();
-    const successUrl = `${baseUrl}/collection/success?purchaseId=${purchase.id}`;
+    const successUrl = `${baseUrl}/collection/success?purchaseId=${purchase.id}&session_id={CHECKOUT_SESSION_ID}`;
 
     if (!stripe) {
       const fakeSessionId = `collection_demo_${purchase.id}_${Date.now()}`;

@@ -46,14 +46,20 @@ function ConstructionLeadOffer({
   );
 }
 
-export function ReportStatusCard({ requestId }: { requestId: string }) {
+export function ReportStatusCard({ requestId, sessionId }: { requestId: string; sessionId?: string | null }) {
   const [status, setStatus] = useState<StatusPayload | null>(null);
 
   useEffect(() => {
     let timer: NodeJS.Timeout | undefined;
 
     async function loadStatus() {
-      const response = await fetch(`/api/reports/${requestId}/status`, { cache: "no-store" });
+      const params = new URLSearchParams();
+      if (sessionId) {
+        params.set("session_id", sessionId);
+      }
+
+      const query = params.toString();
+      const response = await fetch(`/api/reports/${requestId}/status${query ? `?${query}` : ""}`, { cache: "no-store" });
       if (!response.ok) {
         return;
       }
@@ -70,7 +76,7 @@ export function ReportStatusCard({ requestId }: { requestId: string }) {
     return () => {
       if (timer) clearTimeout(timer);
     };
-  }, [requestId]);
+  }, [requestId, sessionId]);
 
   useEffect(() => {
     if (!status?.category) {

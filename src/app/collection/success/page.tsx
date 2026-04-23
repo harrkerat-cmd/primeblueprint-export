@@ -7,9 +7,9 @@ export const dynamic = 'force-dynamic';
 export default async function CollectionSuccessPage({
   searchParams
 }: {
-  searchParams: Promise<{ purchaseId?: string }>;
+  searchParams: Promise<{ purchaseId?: string; session_id?: string }>;
 }) {
-  const { purchaseId } = await searchParams;
+  const { purchaseId, session_id } = await searchParams;
 
   return (
     <Container className="py-16 sm:py-20">
@@ -21,7 +21,7 @@ export default async function CollectionSuccessPage({
         </p>
       </div>
       {purchaseId ? (
-        <CollectionSuccessCard purchaseId={purchaseId} />
+        <CollectionSuccessCard purchaseId={purchaseId} sessionId={session_id} />
       ) : (
         <div className="rounded-[32px] border border-slate-200 bg-white p-8 shadow-soft">
           Missing purchase ID. Please return to your confirmation link.

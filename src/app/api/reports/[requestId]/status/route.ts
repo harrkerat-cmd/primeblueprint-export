@@ -1,14 +1,57 @@
 export const runtime = "nodejs";
 
+import { PackageTier } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { getReportRequest } from "@/lib/report-store";
+import { processPaidReport } from "@/lib/report/process";
+import {
+  getReportRequest,
+  setPaymentCompleteForRequest,
+  upsertPaidPayment
+} from "@/lib/report-store";
+import { stripe } from "@/lib/stripe";
 
 export async function GET(
-  _request: Request,
+  request: Request,
   { params }: { params: Promise<{ requestId: string }> }
 ) {
   const { requestId } = await params;
-  const reportRequest = await getReportRequest(requestId);
+  const sessionId = new URL(request.url).searchParams.get("session_id");
+  let reportRequest = await getReportRequest(requestId);
+
+  if (
+    reportRequest &&
+    reportRequest.paymentStatus !== "PAID" &&
+    sessionId &&
+    stripe
+  ) {
+    try {
+      const session = await stripe.checkout.sessions.retrieve(sessionId);
+      const matchesRequest = session.metadata?.requestId === requestId;
+      if (matchesRequest && session.payment_status === "paid" && session.metadata?.packageId) {
+        await upsertPaidPayment({
+          requestId,
+          packageTier: session.metadata.packageId as PackageTier,
+          amount: session.amount_total ?? 0,
+          currency: session.currency ?? "gbp",
+          stripeCheckoutSessionId: session.id,
+          stripePaymentIntentId:
+            typeof session.payment_intent === "string" ? session.payment_intent : session.payment_intent?.id,
+          stripeCustomerEmail: session.customer_details?.email ?? session.customer_email ?? undefined
+        });
+
+        await setPaymentCompleteForRequest({
+          requestId,
+          packageTier: session.metadata.packageId as PackageTier,
+          stripeSessionId: session.id
+        });
+
+        await processPaidReport(requestId);
+        reportRequest = await getReportRequest(requestId);
+      }
+    } catch (error) {
+      console.error("[api/reports/status] Failed to confirm Stripe session.", error);
+    }
+  }
 
   if (!reportRequest) {
     return NextResponse.json({ error: "Report request not found." }, { status: 404 });
