@@ -821,6 +821,40 @@ export async function setReportGenerationState(requestId: string, generationStat
   });
 }
 
+export async function claimReportGeneration(requestId: string) {
+  if (isDatabaseConfigured && prisma) {
+    const result = await prisma.reportRequest.updateMany({
+      where: {
+        id: requestId,
+        paymentStatus: PaymentStatus.PAID,
+        generationStatus: {
+          in: [GenerationStatus.NOT_STARTED, GenerationStatus.QUEUED]
+        }
+      },
+      data: {
+        generationStatus: GenerationStatus.GENERATING
+      }
+    });
+
+    return result.count > 0;
+  }
+
+  return updateLocalStore((store) => {
+    const record = store.reportRequests.find((item) => item.id === requestId);
+    if (!record || record.paymentStatus !== PaymentStatus.PAID) {
+      return false;
+    }
+
+    if (record.generationStatus !== GenerationStatus.NOT_STARTED && record.generationStatus !== GenerationStatus.QUEUED) {
+      return false;
+    }
+
+    record.updatedAt = nowIso();
+    record.generationStatus = GenerationStatus.GENERATING;
+    return true;
+  });
+}
+
 export async function upsertGeneratedReportShell({ requestId, title }: { requestId: string; title: string }) {
   if (isDatabaseConfigured && prisma) {
     return prisma.generatedReport.upsert({
@@ -912,6 +946,72 @@ export async function completeGeneratedReport({
     report.generationStatus = GenerationStatus.COMPLETED;
     report.generatedAt = timestamp;
     report.generationError = null;
+    return report;
+  });
+}
+
+export async function markGeneratedReportReady({
+  requestId,
+  title,
+  pdfUrl
+}: {
+  requestId: string;
+  title: string;
+  pdfUrl: string;
+}) {
+  if (isDatabaseConfigured && prisma) {
+    return prisma.generatedReport.upsert({
+      where: { reportRequestId: requestId },
+      update: {
+        title,
+        pdfBase64: null,
+        pdfUrl,
+        generationStatus: GenerationStatus.COMPLETED,
+        generatedAt: new Date(),
+        generationError: null
+      },
+      create: {
+        reportRequestId: requestId,
+        title,
+        contentJson: {},
+        pdfBase64: null,
+        pdfUrl,
+        generationStatus: GenerationStatus.COMPLETED,
+        generatedAt: new Date()
+      }
+    });
+  }
+
+  return updateLocalStore((store) => {
+    const timestamp = nowIso();
+    const existing = store.generatedReports.find((item) => item.reportRequestId === requestId);
+
+    if (existing) {
+      existing.updatedAt = timestamp;
+      existing.title = title;
+      existing.pdfBase64 = null;
+      existing.pdfUrl = pdfUrl;
+      existing.generationStatus = GenerationStatus.COMPLETED;
+      existing.generatedAt = timestamp;
+      existing.generationError = null;
+      return existing;
+    }
+
+    const report: StoredGeneratedReport = {
+      id: randomUUID(),
+      createdAt: timestamp,
+      updatedAt: timestamp,
+      reportRequestId: requestId,
+      title,
+      contentJson: {},
+      pdfBase64: null,
+      pdfUrl,
+      generationStatus: GenerationStatus.COMPLETED,
+      generationError: null,
+      generatedAt: timestamp
+    };
+
+    store.generatedReports.push(report);
     return report;
   });
 }

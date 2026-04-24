@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { ReportCategory } from "@prisma/client";
 import { CheckCircle2, Loader2, Mail, TriangleAlert } from "lucide-react";
 import { ButtonLink } from "@/components/shared/button";
@@ -48,6 +48,47 @@ function ConstructionLeadOffer({
 
 export function ReportStatusCard({ requestId, sessionId }: { requestId: string; sessionId?: string | null }) {
   const [status, setStatus] = useState<StatusPayload | null>(null);
+  const finalizeStartedRef = useRef(false);
+
+  useEffect(() => {
+    if (finalizeStartedRef.current) {
+      return;
+    }
+
+    finalizeStartedRef.current = true;
+
+    async function finalizeReport() {
+      try {
+        const response = await fetch(`/api/reports/${requestId}/finalize`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            sessionId: sessionId ?? null
+          })
+        });
+
+        const payload = (await response.json().catch(() => null)) as
+          | StatusPayload
+          | { status?: StatusPayload | null }
+          | null;
+
+        if (payload && "paymentStatus" in payload) {
+          setStatus(payload);
+          return;
+        }
+
+        if (payload?.status) {
+          setStatus(payload.status);
+        }
+      } catch (error) {
+        console.error("[success/report-status-card] Failed to finalize paid report.", error);
+      }
+    }
+
+    void finalizeReport();
+  }, [requestId, sessionId]);
 
   useEffect(() => {
     let timer: NodeJS.Timeout | undefined;

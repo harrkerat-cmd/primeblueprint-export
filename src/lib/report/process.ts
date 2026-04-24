@@ -4,10 +4,11 @@ import { getCategoryByValue } from "@/config/site";
 import { renderReportPdf } from "@/lib/pdf/render-report";
 import { resend } from "@/lib/resend";
 import {
-  completeGeneratedReport,
+  claimReportGeneration,
   createEmailLog,
   failGeneratedReport,
   getReportRequest,
+  markGeneratedReportReady,
   setEmailStatusForRequest,
   setReportGenerationState,
   upsertGeneratedReportShell,
@@ -164,14 +165,18 @@ export async function processPaidReport(requestId: string) {
       return request.report;
     }
 
-    const assets = await buildPaidReportAssets(requestId, request);
-    await sendReportEmail({
-      requestId,
-      request,
-      pdfBase64: assets.pdfBase64,
-      pdfUrl: request.report.pdfUrl ?? assets.pdfUrl,
-      title: request.report.title
-    });
+    try {
+      const assets = await buildPaidReportAssets(requestId, request);
+      await sendReportEmail({
+        requestId,
+        request,
+        pdfBase64: assets.pdfBase64,
+        pdfUrl: request.report.pdfUrl ?? assets.pdfUrl,
+        title: request.report.title
+      });
+    } catch (error) {
+      console.error(`[report/process] Email retry failed for ${requestId}.`, error);
+    }
     return request.report;
   }
 
@@ -179,28 +184,53 @@ export async function processPaidReport(requestId: string) {
     return request.report;
   }
 
-  await setReportGenerationState(requestId, GenerationStatus.GENERATING);
-  await upsertGeneratedReportShell({
-    requestId,
-    title: request.previewTitle ?? "Personalized Report"
-  });
+  const claimed = await claimReportGeneration(requestId);
+  if (!claimed) {
+    return getReportRequest(requestId);
+  }
 
   try {
-    const assets = await buildPaidReportAssets(requestId, request);
+    await upsertGeneratedReportShell({
+      requestId,
+      title: request.previewTitle ?? "Personalized Report"
+    });
+  } catch (error) {
+    console.error(`[report/process] Failed to create generation shell for ${requestId}.`, error);
+  }
 
-    const report = await completeGeneratedReport({
+  let assets: Awaited<ReturnType<typeof buildPaidReportAssets>>;
+  try {
+    assets = await buildPaidReportAssets(requestId, request);
+  } catch (error) {
+    const message = error instanceof Error ? `pdf-build: ${error.message}` : "pdf-build: Report generation failed";
+    try {
+      await failGeneratedReport({ requestId, errorMessage: message });
+      await setReportGenerationState(requestId, GenerationStatus.FAILED);
+    } catch (persistError) {
+      console.error(`[report/process] Failed to persist generation failure for ${requestId}.`, persistError);
+    }
+    throw error;
+  }
+
+  let report = request.report;
+
+  try {
+    report = await markGeneratedReportReady({
       requestId,
       title: assets.title,
-      content: assets.content,
-      pdfBase64: null,
       pdfUrl: assets.pdfUrl
     });
+  } catch (error) {
+    console.error(`[report/process] Failed to persist generated report row for ${requestId}.`, error);
+  }
 
-    if (!report?.pdfUrl) {
-      throw new Error("Report metadata could not be stored correctly.");
-    }
-
+  try {
     await setReportGenerationState(requestId, GenerationStatus.COMPLETED);
+  } catch (error) {
+    console.error(`[report/process] Failed to persist completed report state for ${requestId}.`, error);
+  }
+
+  try {
     await sendReportEmail({
       requestId,
       request,
@@ -208,12 +238,18 @@ export async function processPaidReport(requestId: string) {
       pdfUrl: assets.pdfUrl,
       title: assets.title
     });
-
-    return report;
   } catch (error) {
-    const message = error instanceof Error ? error.message : "Report generation failed";
-    await failGeneratedReport({ requestId, errorMessage: message });
-    await setReportGenerationState(requestId, GenerationStatus.FAILED);
-    throw error;
+    console.error(`[report/process] Unexpected email send failure for ${requestId}.`, error);
   }
+
+  if (report) {
+    return report;
+  }
+
+  return {
+    reportRequestId: requestId,
+    title: assets.title,
+    pdfUrl: assets.pdfUrl,
+    generationStatus: GenerationStatus.COMPLETED
+  };
 }
