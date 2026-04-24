@@ -645,16 +645,9 @@ export async function renderReportPdf({
   logPdfInputShape(normalizedContent);
 
   try {
-    return await renderComplexReportPdf(normalizedContent);
+    return await renderFlatFallbackPdf(normalizedContent);
   } catch (error) {
-    console.error("[pdf-build] Complex renderer failed, falling back to flat renderer.", error);
-
-    try {
-      return await renderFlatFallbackPdf(normalizedContent);
-    } catch (fallbackError) {
-      const complexMessage = error instanceof Error ? error.message : "Unknown complex PDF error";
-      const fallbackMessage = fallbackError instanceof Error ? fallbackError.message : "Unknown fallback PDF error";
-      throw new Error(`PDF rendering failed. Complex renderer: ${complexMessage}. Fallback renderer: ${fallbackMessage}.`);
-    }
+    const message = error instanceof Error ? error.message : "Unknown flat PDF error";
+    throw new Error(`Flat PDF rendering failed: ${message}`);
   }
 }
