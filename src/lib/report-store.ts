@@ -953,10 +953,12 @@ export async function completeGeneratedReport({
 export async function markGeneratedReportReady({
   requestId,
   title,
+  pdfBase64,
   pdfUrl
 }: {
   requestId: string;
   title: string;
+  pdfBase64: string | null;
   pdfUrl: string;
 }) {
   if (isDatabaseConfigured && prisma) {
@@ -964,7 +966,7 @@ export async function markGeneratedReportReady({
       where: { reportRequestId: requestId },
       update: {
         title,
-        pdfBase64: null,
+        pdfBase64,
         pdfUrl,
         generationStatus: GenerationStatus.COMPLETED,
         generatedAt: new Date(),
@@ -974,7 +976,7 @@ export async function markGeneratedReportReady({
         reportRequestId: requestId,
         title,
         contentJson: {},
-        pdfBase64: null,
+        pdfBase64,
         pdfUrl,
         generationStatus: GenerationStatus.COMPLETED,
         generatedAt: new Date()
@@ -989,7 +991,7 @@ export async function markGeneratedReportReady({
     if (existing) {
       existing.updatedAt = timestamp;
       existing.title = title;
-      existing.pdfBase64 = null;
+      existing.pdfBase64 = pdfBase64;
       existing.pdfUrl = pdfUrl;
       existing.generationStatus = GenerationStatus.COMPLETED;
       existing.generatedAt = timestamp;
@@ -1004,7 +1006,7 @@ export async function markGeneratedReportReady({
       reportRequestId: requestId,
       title,
       contentJson: {},
-      pdfBase64: null,
+      pdfBase64,
       pdfUrl,
       generationStatus: GenerationStatus.COMPLETED,
       generationError: null,

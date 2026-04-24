@@ -218,6 +218,7 @@ export async function processPaidReport(requestId: string) {
     report = await markGeneratedReportReady({
       requestId,
       title: assets.title,
+      pdfBase64: assets.pdfBase64,
       pdfUrl: assets.pdfUrl
     });
   } catch (error) {
