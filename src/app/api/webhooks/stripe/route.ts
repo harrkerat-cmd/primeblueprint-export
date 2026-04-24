@@ -1,8 +1,10 @@
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 import { headers } from "next/headers";
 import { GenerationStatus, PackageTier } from "@prisma/client";
-import { NextResponse } from "next/server";
+import { after, NextResponse } from "next/server";
+import type Stripe from "stripe";
 import { getConstructionLeadPlan } from "@/config/construction-leads";
 import { processCollectionPurchase } from "@/lib/collection/process";
 import {
@@ -21,25 +23,7 @@ import {
 } from "@/lib/report-store";
 import { stripe } from "@/lib/stripe";
 
-export async function POST(request: Request) {
-  if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
-    return NextResponse.json({ error: "Stripe webhook is not configured." }, { status: 500 });
-  }
-
-  const body = await request.text();
-  const signature = (await headers()).get("stripe-signature");
-
-  if (!signature) {
-    return NextResponse.json({ error: "Missing Stripe signature." }, { status: 400 });
-  }
-
-  let event;
-  try {
-    event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET);
-  } catch (error) {
-    return NextResponse.json({ error: error instanceof Error ? error.message : "Invalid signature." }, { status: 400 });
-  }
-
+async function processStripeEvent(event: Stripe.Event) {
   if (event.type === "checkout.session.completed") {
     const session = event.data.object;
     const productType = session.metadata?.productType;
@@ -127,6 +111,43 @@ export async function POST(request: Request) {
       await markPaymentFailed(requestId);
     }
   }
+}
 
-  return NextResponse.json({ received: true });
+export async function POST(request: Request) {
+  try {
+    if (!stripe || !process.env.STRIPE_WEBHOOK_SECRET) {
+      console.error("[stripe-webhook] Stripe webhook is not configured.");
+      return NextResponse.json({ received: true, error: "Stripe webhook is not configured." });
+    }
+
+    const body = await request.text();
+    const signature = (await headers()).get("stripe-signature");
+
+    if (!signature) {
+      console.error("[stripe-webhook] Missing Stripe signature.");
+      return NextResponse.json({ received: true, error: "Missing Stripe signature." });
+    }
+
+    const event = stripe.webhooks.constructEvent(body, signature, process.env.STRIPE_WEBHOOK_SECRET);
+
+    after(async () => {
+      try {
+        await processStripeEvent(event);
+      } catch (error) {
+        console.error("[stripe-webhook] Async processing failed.", {
+          message: error instanceof Error ? error.message : "Unknown webhook processing error",
+          eventType: event.type,
+          eventId: event.id
+        });
+      }
+    });
+
+    return NextResponse.json({ received: true });
+  } catch (error) {
+    console.error("[stripe-webhook] Handler failed.", error instanceof Error ? error.message : error);
+    return NextResponse.json({
+      received: true,
+      error: error instanceof Error ? error.message : "Stripe webhook handler failed."
+    });
+  }
 }

@@ -1,0 +1,16 @@
+{
+  "functions": {
+    "pages/api/webhook/stripe.ts": {
+      "maxDuration": 60
+    },
+    "pages/api/reports/generate.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/webhooks/stripe/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/reports/[requestId]/finalize/route.ts": {
+      "maxDuration": 60
+    }
+  }
+}

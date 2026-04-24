@@ -10,7 +10,6 @@ import {
   setCheckoutPending,
   setPaymentCompleteForRequest
 } from "@/lib/report-store";
-import { processPaidReport } from "@/lib/report/process";
 import { stripe } from "@/lib/stripe";
 import { checkoutSchema } from "@/lib/validations/checkout";
 
@@ -103,7 +102,6 @@ export async function POST(request: Request) {
         generationStatus: GenerationStatus.QUEUED
       });
 
-      await processPaidReport(reportRequest.id);
       return NextResponse.json({ url: successUrl, mode: "demo", packageId: selectedPackage.id });
     }
 

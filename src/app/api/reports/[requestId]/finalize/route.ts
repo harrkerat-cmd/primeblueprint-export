@@ -2,7 +2,6 @@ export const runtime = "nodejs";
 
 import { PackageTier, PaymentStatus } from "@prisma/client";
 import { NextResponse } from "next/server";
-import { processPaidReport } from "@/lib/report/process";
 import { buildReportStatusPayload } from "@/lib/report/status";
 import {
   getReportRequest,
@@ -73,30 +72,6 @@ export async function POST(
         status: buildReportStatusPayload(reportRequest, requestId)
       },
       { status: 409 }
-    );
-  }
-
-  if (reportRequest.generationStatus === "FAILED" || reportRequest.report?.generationStatus === "FAILED") {
-    return NextResponse.json(
-      {
-        error: "Report generation previously failed.",
-        status: buildReportStatusPayload(reportRequest, requestId)
-      },
-      { status: 409 }
-    );
-  }
-
-  try {
-    await processPaidReport(requestId);
-  } catch (error) {
-    const refreshed = await getReportRequest(requestId);
-    return NextResponse.json(
-      {
-        error: "Report generation failed.",
-        detail: error instanceof Error ? error.message : "Unknown report generation error.",
-        status: refreshed ? buildReportStatusPayload(refreshed, requestId) : null
-      },
-      { status: 500 }
     );
   }
 
